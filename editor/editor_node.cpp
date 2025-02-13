@@ -4751,7 +4751,7 @@ Ref<Script> EditorNode::get_object_custom_type_base(const Object *p_object) cons
 
 	const Node *node = Object::cast_to<const Node>(p_object);
 	if (node && node->has_meta(SceneStringName(_custom_type_script))) {
-		return node->get_meta(SceneStringName(_custom_type_script));
+		return PropertyUtils::get_custom_type_script(node);
 	}
 
 	Ref<Script> scr = p_object->get_script();
@@ -4943,7 +4943,7 @@ Ref<Texture2D> EditorNode::get_class_icon(const String &p_class, const String &p
 	String script_path;
 	if (ScriptServer::is_global_class(p_class)) {
 		script_path = ScriptServer::get_global_class_path(p_class);
-	} else if (ResourceLoader::exists(p_class)) { // If the script is not a class_name we check if the script resource exists.
+	} else if (!p_class.get_extension().is_empty() && ResourceLoader::exists(p_class)) { // If the script is not a class_name we check if the script resource exists.
 		script_path = p_class;
 	}
 
