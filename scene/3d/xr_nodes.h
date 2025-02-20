@@ -191,6 +191,7 @@ class XROrigin3D : public Node3D {
 
 private:
 	bool current = false;
+	Transform3D world_origin;
 	static Vector<XROrigin3D *> origin_nodes; // all origin nodes in tree
 
 	void _set_current(bool p_enabled, bool p_update_others);
@@ -208,7 +209,7 @@ public:
 	void set_current(bool p_enabled);
 	bool is_current() const;
 
-	XROrigin3D() {}
+	XROrigin3D();
 	~XROrigin3D() {}
 };
 

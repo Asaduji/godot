@@ -643,6 +643,10 @@ Plane XRAnchor3D::get_plane() const {
 
 Vector<XROrigin3D *> XROrigin3D::origin_nodes;
 
+XROrigin3D::XROrigin3D() {
+	set_process_internal(true);
+}
+
 PackedStringArray XROrigin3D::get_configuration_warnings() const {
 	PackedStringArray warnings = Node3D::get_configuration_warnings();
 
@@ -782,9 +786,21 @@ void XROrigin3D::_notification(int p_what) {
 			}
 		} break;
 
+		case NOTIFICATION_INTERNAL_PROCESS:
+		{
+			if (!Engine::get_singleton()->is_editor_hint() && is_physics_interpolated_and_enabled()) {
+				auto global_transform = get_global_transform_interpolated();
+
+				if (global_transform != world_origin) {
+					world_origin = global_transform;
+					xr_server->set_world_origin(global_transform);
+				}
+			}
+		} break;
+
 		case NOTIFICATION_LOCAL_TRANSFORM_CHANGED:
 		case NOTIFICATION_TRANSFORM_CHANGED: {
-			if (current && !Engine::get_singleton()->is_editor_hint()) {
+			if (current && !Engine::get_singleton()->is_editor_hint() && !is_physics_interpolated_and_enabled()) {
 				xr_server->set_world_origin(get_global_transform());
 			}
 		} break;
