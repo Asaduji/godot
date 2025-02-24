@@ -739,6 +739,10 @@ void XROrigin3D::_set_current(bool p_enabled, bool p_update_others) {
 }
 
 void XROrigin3D::_physics_interpolated_changed() {
+	if (!current) {
+		return;
+	}
+
 	XRServer *xr_server = XRServer::get_singleton();
 	ERR_FAIL_NULL(xr_server);
 
