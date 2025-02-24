@@ -194,6 +194,7 @@ private:
 	static Vector<XROrigin3D *> origin_nodes; // all origin nodes in tree
 
 	void _set_current(bool p_enabled, bool p_update_others);
+	virtual void _physics_interpolated_changed() override;
 
 protected:
 	void _notification(int p_what);

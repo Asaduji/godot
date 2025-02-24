@@ -2739,7 +2739,13 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 
 		float aspect = p_viewport_size.width / (float)p_viewport_size.height;
 
-		Transform3D world_origin = xr_server->get_world_origin();
+		Transform3D world_origin;
+
+		if (xr_server->is_world_origin_interpolated()) {
+			world_origin = xr_server->get_world_origin_interpolated();
+		} else {
+			world_origin = xr_server->get_world_origin();
+		}
 
 		// We ignore our camera position, it will have been positioned with a slightly old tracking position.
 		// Instead we take our origin point and have our XR interface add fresh tracking data! Whoohoo!

@@ -714,6 +714,8 @@ void XROrigin3D::_set_current(bool p_enabled, bool p_update_others) {
 		ERR_FAIL_NULL(xr_server);
 
 		xr_server->set_world_origin(get_global_transform());
+		xr_server->set_origin_interpolation_enabled(is_physics_interpolated());
+		xr_server->reset_origin_interpolation();
 	}
 
 	// Check if we need to update our other origin nodes accordingly
@@ -734,6 +736,14 @@ void XROrigin3D::_set_current(bool p_enabled, bool p_update_others) {
 			}
 		}
 	}
+}
+
+void XROrigin3D::_physics_interpolated_changed() {
+	XRServer *xr_server = XRServer::get_singleton();
+	ERR_FAIL_NULL(xr_server);
+
+	xr_server->set_origin_interpolation_enabled(is_physics_interpolated());
+	xr_server->reset_origin_interpolation();
 }
 
 void XROrigin3D::set_current(bool p_enabled) {

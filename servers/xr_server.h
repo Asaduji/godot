@@ -96,6 +96,15 @@ private:
 	Transform3D reference_frame; /* our reference frame */
 	bool camera_locked_to_origin = false;
 
+	// World origin is set by XROrigin3D on every physics frame. If physics are interpolated on the active XROrigin3D node,
+	// we also need to interpolate the world origin to avoid jittering
+	struct WorldOriginInterpolationState {
+		bool interpolate_origin = false;
+		Transform3D prev_world_origin;
+		Transform3D curr_world_origin;
+		uint64_t curr_physics_tick = 0;
+	} world_origin_interpolation_state;
+
 	// As we may be updating our main state for our next frame while we're still rendering our previous frame,
 	// we need to keep copies around.
 	struct RenderState {
@@ -232,6 +241,12 @@ public:
 	PackedStringArray get_suggested_tracker_names() const;
 	PackedStringArray get_suggested_pose_names(const StringName &p_tracker_name) const;
 	// Q: Should we add get_suggested_input_names and get_suggested_haptic_names even though we don't use them for the IDE?
+
+	void set_origin_interpolation_enabled(bool p_enabled);
+	void reset_origin_interpolation();
+	bool is_world_origin_interpolated() const;
+
+	Transform3D get_world_origin_interpolated() const;
 
 	// Process is called before we handle our physics process and game process. This is where our interfaces will update controller data and such.
 	void _process();

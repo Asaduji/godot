@@ -30,6 +30,7 @@
 
 #include "xr_server.h"
 #include "core/config/project_settings.h"
+#include <core/math/transform_interpolator.h>
 #include "xr/xr_interface.h"
 #include "xr/xr_positional_tracker.h"
 #include "xr_server.compat.inc"
@@ -155,7 +156,17 @@ Transform3D XRServer::get_world_origin() const {
 }
 
 void XRServer::set_world_origin(const Transform3D &p_world_origin) {
+	if (is_world_origin_interpolated()) {
+		if (world_origin_interpolation_state.curr_physics_tick != Engine::get_singleton()->get_physics_frames()) {
+			world_origin_interpolation_state.prev_world_origin = world_origin;
+			world_origin_interpolation_state.curr_physics_tick = Engine::get_singleton()->get_physics_frames();
+		}
+
+		world_origin_interpolation_state.curr_world_origin = p_world_origin;
+	}
+
 	world_origin = p_world_origin;
+
 	set_render_world_origin(world_origin);
 }
 
@@ -424,6 +435,29 @@ PackedStringArray XRServer::get_suggested_pose_names(const StringName &p_tracker
 	}
 
 	return arr;
+}
+
+void XRServer::set_origin_interpolation_enabled(bool p_enabled) {
+	world_origin_interpolation_state.interpolate_origin = p_enabled;
+}
+
+void XRServer::reset_origin_interpolation() {
+	world_origin_interpolation_state.curr_world_origin = world_origin;
+	world_origin_interpolation_state.prev_world_origin = world_origin;
+	world_origin_interpolation_state.curr_physics_tick = Engine::get_singleton()->get_physics_frames();
+}
+
+bool XRServer::is_world_origin_interpolated() const {
+	return world_origin_interpolation_state.interpolate_origin;
+}
+
+Transform3D XRServer::get_world_origin_interpolated() const {
+	real_t f = Engine::get_singleton()->get_physics_interpolation_fraction();
+
+	Transform3D t;
+	TransformInterpolator::interpolate_transform_3d(world_origin_interpolation_state.prev_world_origin, world_origin_interpolation_state.curr_world_origin, t, f);
+
+	return t;
 }
 
 void XRServer::_process() {
