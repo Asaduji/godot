@@ -961,12 +961,6 @@ void RendererSceneCull::instance_set_transform(RID p_instance, const Transform3D
 		instance->transform = p_transform;
 		_instance_queue_update(instance, true);
 
-#if defined(DEBUG_ENABLED) && defined(TOOLS_ENABLED)
-		if (_interpolation_data.interpolation_enabled && !instance->interpolated && Engine::get_singleton()->is_in_physics_frame()) {
-			PHYSICS_INTERPOLATION_NODE_WARNING(instance->object_id, "Non-interpolated instance triggered from physics process");
-		}
-#endif
-
 		return;
 	}
 
