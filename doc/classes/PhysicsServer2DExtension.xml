@@ -668,6 +668,7 @@
 			<param index="1" name="shape_idx" type="int" />
 			<param index="2" name="enable" type="bool" />
 			<param index="3" name="margin" type="float" />
+			<param index="4" name="direction" type="Vector2" />
 			<description>
 				Overridable version of [method PhysicsServer2D.body_set_shape_as_one_way_collision].
 			</description>
@@ -1024,6 +1025,12 @@
 				Overridable version of [method PhysicsServer2D.space_create].
 			</description>
 		</method>
+		<method name="_space_flush_queries" qualifiers="virtual required" experimental="">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<description>
+			</description>
+		</method>
 		<method name="_space_get_contact_count" qualifiers="virtual required const">
 			<return type="int" />
 			<param index="0" name="space" type="RID" />
@@ -1045,6 +1052,13 @@
 			<param index="0" name="space" type="RID" />
 			<description>
 				Overridable version of [method PhysicsServer2D.space_get_direct_state].
+			</description>
+		</method>
+		<method name="_space_get_last_process_info" qualifiers="virtual required" experimental="">
+			<return type="int" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="process_info" type="int" enum="PhysicsServer2D.ProcessInfo" />
+			<description>
 			</description>
 		</method>
 		<method name="_space_get_param" qualifiers="virtual required const">
@@ -1086,6 +1100,13 @@
 			<param index="2" name="value" type="float" />
 			<description>
 				Overridable version of [method PhysicsServer2D.space_set_param].
+			</description>
+		</method>
+		<method name="_space_step" qualifiers="virtual required" experimental="">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="delta" type="float" />
+			<description>
 			</description>
 		</method>
 		<method name="_step" qualifiers="virtual required">

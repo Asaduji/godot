@@ -31,6 +31,9 @@
 #pragma once
 
 #include "scene/3d/node_3d.h"
+#include "servers/rendering/rendering_server.h"
+
+class TriangleMesh;
 
 class VisualInstance3D : public Node3D {
 	GDCLASS(VisualInstance3D, Node3D);

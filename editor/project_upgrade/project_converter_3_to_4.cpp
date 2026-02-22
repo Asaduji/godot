@@ -36,6 +36,7 @@
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/object/ref_counted.h"
+#include "core/os/keyboard.h"
 #include "core/os/time.h"
 #include "core/templates/list.h"
 #include "editor/project_upgrade/renames_map_3_to_4.h"
@@ -1198,8 +1199,8 @@ bool ProjectConverter3To4::test_array_names() {
 		//	}
 		//}
 
-		List<StringName> classes_list;
-		ClassDB::get_class_list(&classes_list);
+		LocalVector<StringName> classes_list;
+		ClassDB::get_class_list(classes_list);
 		for (StringName &name_of_class : classes_list) {
 			List<MethodInfo> method_list;
 			ClassDB::get_method_list(name_of_class, &method_list, true);

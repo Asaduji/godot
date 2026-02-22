@@ -39,7 +39,7 @@
 #include "objects/jolt_area_3d.h"
 #include "objects/jolt_body_3d.h"
 #include "objects/jolt_soft_body_3d.h"
-#include "servers/physics_server_3d_wrap_mt.h"
+#include "servers/physics_3d/physics_server_3d_wrap_mt.h"
 #include "shapes/jolt_box_shape_3d.h"
 #include "shapes/jolt_capsule_shape_3d.h"
 #include "shapes/jolt_concave_polygon_shape_3d.h"
@@ -212,6 +212,24 @@ bool JoltPhysicsServer3D::space_is_active(RID p_space) const {
 	ERR_FAIL_NULL_V(space, false);
 
 	return active_spaces.has(space);
+}
+
+void JoltPhysicsServer3D::space_step(RID p_space, real_t p_delta) {
+	JoltSpace3D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL(space);
+	ERR_FAIL_COND(space->is_stepping());
+
+	space->step(p_delta);
+}
+
+void JoltPhysicsServer3D::space_flush_queries(RID p_space) {
+	flushing_queries = true;
+
+	JoltSpace3D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL(space);
+	space->call_queries();
+
+	flushing_queries = false;
 }
 
 void JoltPhysicsServer3D::space_set_param(RID p_space, SpaceParameter p_param, real_t p_value) {
@@ -985,9 +1003,10 @@ RID JoltPhysicsServer3D::soft_body_create() {
 	return rid;
 }
 
-void JoltPhysicsServer3D::soft_body_update_rendering_server(RID p_body, PhysicsServer3DRenderingServerHandler *p_rendering_server_handler) {
+void JoltPhysicsServer3D::soft_body_update_rendering_server(RID p_body, RequiredParam<PhysicsServer3DRenderingServerHandler> rp_rendering_server_handler) {
 	JoltSoftBody3D *body = soft_body_owner.get_or_null(p_body);
 	ERR_FAIL_NULL(body);
+	EXTRACT_PARAM_OR_FAIL(p_rendering_server_handler, rp_rendering_server_handler);
 
 	return body->update_rendering_server(p_rendering_server_handler);
 }
@@ -1580,7 +1599,7 @@ bool JoltPhysicsServer3D::joint_is_disabled_collisions_between_bodies(RID p_join
 	return joint->is_collision_disabled();
 }
 
-void JoltPhysicsServer3D::free(RID p_rid) {
+void JoltPhysicsServer3D::free_rid(RID p_rid) {
 	if (JoltShape3D *shape = shape_owner.get_or_null(p_rid)) {
 		free_shape(shape);
 	} else if (JoltBody3D *body = body_owner.get_or_null(p_rid)) {
@@ -1658,6 +1677,10 @@ bool JoltPhysicsServer3D::is_flushing_queries() const {
 }
 
 int JoltPhysicsServer3D::get_process_info(ProcessInfo p_process_info) {
+	return 0;
+}
+
+int JoltPhysicsServer3D::space_get_last_process_info(RID p_space, ProcessInfo p_info) {
 	return 0;
 }
 

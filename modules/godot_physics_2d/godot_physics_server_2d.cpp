@@ -245,6 +245,44 @@ bool GodotPhysicsServer2D::space_is_active(RID p_space) const {
 	return active_spaces.has(space);
 }
 
+void GodotPhysicsServer2D::space_step(RID p_space, real_t p_delta) {
+	GodotSpace2D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL(space);
+	ERR_FAIL_COND_MSG(active_spaces.has(space), "A activate godot space can't be stepped manually.");
+
+	// May be let pending_shape_update_list as a member of GodotSpaces3D and update shapes by themselves.
+	// To avoid effecting Spaces which are handled by developer (for lockstep/rollback netcode, it is particularly sensitive).
+	// Otherwise, call _update_shapes() directly.
+	SelfList<GodotCollisionObject2D> *collision_object_self = pending_shape_update_list.first();
+	while (collision_object_self) {
+		if (collision_object_self->self()->get_space() == space) {
+			collision_object_self->self()->_shape_changed();
+
+			SelfList<GodotCollisionObject2D> *to_remove = collision_object_self;
+			collision_object_self = collision_object_self->next();
+
+			pending_shape_update_list.remove(to_remove);
+		} else {
+			collision_object_self = collision_object_self->next();
+		}
+	}
+
+	stepper->step(space, p_delta);
+}
+
+void GodotPhysicsServer2D::space_flush_queries(RID p_space) {
+	// Like _update_shapes(), to provide controllability for developers, flushing_queries flag should active as a member of space and check it for each space.
+	// But I'm not sure about that, I am not familiar with multi-threads and the architecture of GodotPhysics.
+	flushing_queries = true;
+
+	GodotSpace2D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL(space);
+	ERR_FAIL_COND_MSG(active_spaces.has(space), "A activate godot space should not flush queries manually.");
+	space->call_queries();
+
+	flushing_queries = false;
+}
+
 void GodotPhysicsServer2D::space_set_param(RID p_space, SpaceParameter p_param, real_t p_value) {
 	GodotSpace2D *space = space_owner.get_or_null(p_space);
 	ERR_FAIL_NULL(space);
@@ -656,13 +694,13 @@ void GodotPhysicsServer2D::body_set_shape_disabled(RID p_body, int p_shape_idx, 
 	body->set_shape_disabled(p_shape_idx, p_disabled);
 }
 
-void GodotPhysicsServer2D::body_set_shape_as_one_way_collision(RID p_body, int p_shape_idx, bool p_enable, real_t p_margin) {
+void GodotPhysicsServer2D::body_set_shape_as_one_way_collision(RID p_body, int p_shape_idx, bool p_enable, real_t p_margin, const Vector2 &p_direction) {
 	GodotBody2D *body = body_owner.get_or_null(p_body);
 	ERR_FAIL_NULL(body);
 	ERR_FAIL_INDEX(p_shape_idx, body->get_shape_count());
 	FLUSH_QUERY_CHECK(body);
 
-	body->set_shape_as_one_way_collision(p_shape_idx, p_enable, p_margin);
+	body->set_shape_as_one_way_collision(p_shape_idx, p_enable, p_margin, p_direction);
 }
 
 void GodotPhysicsServer2D::body_set_continuous_collision_detection_mode(RID p_body, CCDMode p_mode) {
@@ -1219,7 +1257,7 @@ PhysicsServer2D::JointType GodotPhysicsServer2D::joint_get_type(RID p_joint) con
 	return joint->get_type();
 }
 
-void GodotPhysicsServer2D::free(RID p_rid) {
+void GodotPhysicsServer2D::free_rid(RID p_rid) {
 	_update_shapes(); // just in case
 
 	if (shape_owner.owns(p_rid)) {
@@ -1264,7 +1302,7 @@ void GodotPhysicsServer2D::free(RID p_rid) {
 		}
 
 		active_spaces.erase(space);
-		free(space->get_default_area()->get_self());
+		free_rid(space->get_default_area()->get_self());
 		space_owner.free(p_rid);
 		memdelete(space);
 	} else if (joint_owner.owns(p_rid)) {
@@ -1383,6 +1421,25 @@ int GodotPhysicsServer2D::get_process_info(ProcessInfo p_info) {
 		} break;
 		case INFO_ISLAND_COUNT: {
 			return island_count;
+		} break;
+	}
+
+	return 0;
+}
+
+int GodotPhysicsServer2D::space_get_last_process_info(RID p_space, ProcessInfo p_info) {
+	GodotSpace2D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL_V(space, 0);
+
+	switch (p_info) {
+		case INFO_ACTIVE_OBJECTS: {
+			return space->get_active_objects();
+		} break;
+		case INFO_COLLISION_PAIRS: {
+			return space->get_collision_pairs();
+		} break;
+		case INFO_ISLAND_COUNT: {
+			return space->get_island_count();
 		} break;
 	}
 

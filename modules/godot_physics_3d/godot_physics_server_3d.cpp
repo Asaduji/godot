@@ -175,6 +175,44 @@ bool GodotPhysicsServer3D::space_is_active(RID p_space) const {
 	return active_spaces.has(space);
 }
 
+void GodotPhysicsServer3D::space_step(RID p_space, real_t p_delta) {
+	GodotSpace3D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL(space);
+	ERR_FAIL_COND_MSG(active_spaces.has(space), "A activate godot space can't be stepped manually.");
+
+	// May be let pending_shape_update_list as a member of GodotSpaces3D and update shapes by themselves.
+	// To avoid effecting Spaces which are handled by developer (for lockstep/rollback netcode, it is particularly sensitive).
+	// If it is unnecessary, call _update_shapes() directly.
+	SelfList<GodotCollisionObject3D> *collision_object_self = pending_shape_update_list.first();
+	while (collision_object_self) {
+		if (collision_object_self->self()->get_space() == space) {
+			collision_object_self->self()->_shape_changed();
+
+			SelfList<GodotCollisionObject3D> *to_remove = collision_object_self;
+			collision_object_self = collision_object_self->next();
+
+			pending_shape_update_list.remove(to_remove);
+		} else {
+			collision_object_self = collision_object_self->next();
+		}
+	}
+
+	stepper->step(space, p_delta);
+}
+
+void GodotPhysicsServer3D::space_flush_queries(RID p_space) {
+	// Like _update_shapes(), to provide controllability for developers, flushing_queries flag should active as a member of space and check it for each space.
+	// But I'm not sure about that, I am not familiar with multi-threads and the architecture of GodotPhysics.
+	flushing_queries = true;
+
+	GodotSpace3D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL(space);
+	ERR_FAIL_COND_MSG(active_spaces.has(space), "A activate godot space should not flush queries manually.");
+	space->call_queries();
+
+	flushing_queries = false;
+}
+
 void GodotPhysicsServer3D::space_set_param(RID p_space, SpaceParameter p_param, real_t p_value) {
 	GodotSpace3D *space = space_owner.get_or_null(p_space);
 	ERR_FAIL_NULL(space);
@@ -976,9 +1014,10 @@ RID GodotPhysicsServer3D::soft_body_create() {
 	return rid;
 }
 
-void GodotPhysicsServer3D::soft_body_update_rendering_server(RID p_body, PhysicsServer3DRenderingServerHandler *p_rendering_server_handler) {
+void GodotPhysicsServer3D::soft_body_update_rendering_server(RID p_body, RequiredParam<PhysicsServer3DRenderingServerHandler> rp_rendering_server_handler) {
 	GodotSoftBody3D *soft_body = soft_body_owner.get_or_null(p_body);
 	ERR_FAIL_NULL(soft_body);
+	EXTRACT_PARAM_OR_FAIL(p_rendering_server_handler, rp_rendering_server_handler);
 
 	soft_body->update_rendering_server(p_rendering_server_handler);
 }
@@ -1595,7 +1634,7 @@ bool GodotPhysicsServer3D::generic_6dof_joint_get_flag(RID p_joint, Vector3::Axi
 	return generic_6dof_joint->get_flag(p_axis, p_flag);
 }
 
-void GodotPhysicsServer3D::free(RID p_rid) {
+void GodotPhysicsServer3D::free_rid(RID p_rid) {
 	_update_shapes(); //just in case
 
 	if (shape_owner.owns(p_rid)) {
@@ -1646,8 +1685,8 @@ void GodotPhysicsServer3D::free(RID p_rid) {
 		}
 
 		active_spaces.erase(space);
-		free(space->get_default_area()->get_self());
-		free(space->get_static_global_body());
+		free_rid(space->get_default_area()->get_self());
+		free_rid(space->get_static_global_body());
 
 		space_owner.free(p_rid);
 		memdelete(space);
@@ -1760,6 +1799,25 @@ int GodotPhysicsServer3D::get_process_info(ProcessInfo p_info) {
 		} break;
 		case INFO_ISLAND_COUNT: {
 			return island_count;
+		} break;
+	}
+
+	return 0;
+}
+
+int GodotPhysicsServer3D::space_get_last_process_info(RID p_space, ProcessInfo p_info) {
+	GodotSpace3D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL_V(space, 0);
+
+	switch (p_info) {
+		case INFO_ACTIVE_OBJECTS: {
+			return space->get_active_objects();
+		} break;
+		case INFO_COLLISION_PAIRS: {
+			return space->get_collision_pairs();
+		} break;
+		case INFO_ISLAND_COUNT: {
+			return space->get_island_count();
 		} break;
 	}
 

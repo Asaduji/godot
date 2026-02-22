@@ -36,7 +36,7 @@
 #include "godot_step_2d.h"
 
 #include "core/templates/rid_owner.h"
-#include "servers/physics_server_2d.h"
+#include "servers/physics_2d/physics_server_2d.h"
 
 class GodotPhysicsServer2D : public PhysicsServer2D {
 	GDCLASS(GodotPhysicsServer2D, PhysicsServer2D);
@@ -107,6 +107,8 @@ public:
 	virtual RID space_create() override;
 	virtual void space_set_active(RID p_space, bool p_active) override;
 	virtual bool space_is_active(RID p_space) const override;
+	virtual void space_step(RID p_space, real_t p_delta) override;
+	virtual void space_flush_queries(RID p_space) override;
 
 	virtual void space_set_param(RID p_space, SpaceParameter p_param, real_t p_value) override;
 	virtual real_t space_get_param(RID p_space, SpaceParameter p_param) const override;
@@ -185,7 +187,7 @@ public:
 	virtual void body_clear_shapes(RID p_body) override;
 
 	virtual void body_set_shape_disabled(RID p_body, int p_shape_idx, bool p_disabled) override;
-	virtual void body_set_shape_as_one_way_collision(RID p_body, int p_shape_idx, bool p_enable, real_t p_margin) override;
+	virtual void body_set_shape_as_one_way_collision(RID p_body, int p_shape_idx, bool p_enable, real_t p_margin, const Vector2 &p_direction) override;
 
 	virtual void body_attach_object_instance_id(RID p_body, ObjectID p_id) override;
 	virtual ObjectID body_get_object_instance_id(RID p_body) const override;
@@ -285,7 +287,7 @@ public:
 
 	/* MISC */
 
-	virtual void free(RID p_rid) override;
+	virtual void free_rid(RID p_rid) override;
 
 	virtual void set_active(bool p_active) override;
 	virtual void init() override;
@@ -298,6 +300,7 @@ public:
 	virtual bool is_flushing_queries() const override { return flushing_queries; }
 
 	int get_process_info(ProcessInfo p_info) override;
+	virtual int space_get_last_process_info(RID p_space, ProcessInfo p_info) override;
 
 	GodotPhysicsServer2D(bool p_using_threads = false);
 	~GodotPhysicsServer2D() {}

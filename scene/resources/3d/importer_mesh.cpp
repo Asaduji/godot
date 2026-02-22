@@ -64,13 +64,13 @@ Mesh::BlendShapeMode ImporterMesh::get_blend_shape_mode() const {
 	return blend_shape_mode;
 }
 
-void ImporterMesh::add_surface(Mesh::PrimitiveType p_primitive, const Array &p_arrays, const TypedArray<Array> &p_blend_shapes, const Dictionary &p_lods, const Ref<Material> &p_material, const String &p_name, const uint64_t p_flags) {
+void ImporterMesh::add_surface(Mesh::PrimitiveType p_primitive, const Array &p_arrays, const TypedArray<Array> &p_blend_shapes, const Dictionary &p_lods, const Ref<Material> &p_material, const String &p_surface_name, const uint64_t p_flags) {
 	ERR_FAIL_COND(p_blend_shapes.size() != blend_shapes.size());
 	ERR_FAIL_COND(p_arrays.size() != Mesh::ARRAY_MAX);
 	Surface s;
 	s.primitive = p_primitive;
 	s.arrays = p_arrays;
-	s.name = p_name;
+	s.name = p_surface_name;
 	s.flags = p_flags;
 
 	Vector<Vector3> vertex_array = p_arrays[Mesh::ARRAY_VERTEX];
@@ -274,16 +274,16 @@ void ImporterMesh::optimize_indices() {
 }
 
 #define VERTEX_SKIN_FUNC(bone_count, vert_idx, read_array, write_array, transform_array, bone_array, weight_array) \
-	Vector3 transformed_vert;                                                                                      \
-	for (unsigned int weight_idx = 0; weight_idx < bone_count; weight_idx++) {                                     \
-		int bone_idx = bone_array[vert_idx * bone_count + weight_idx];                                             \
-		float w = weight_array[vert_idx * bone_count + weight_idx];                                                \
-		if (w < FLT_EPSILON) {                                                                                     \
-			continue;                                                                                              \
-		}                                                                                                          \
-		ERR_FAIL_INDEX(bone_idx, static_cast<int>(transform_array.size()));                                        \
-		transformed_vert += transform_array[bone_idx].xform(read_array[vert_idx]) * w;                             \
-	}                                                                                                              \
+	Vector3 transformed_vert; \
+	for (unsigned int weight_idx = 0; weight_idx < bone_count; weight_idx++) { \
+		int bone_idx = bone_array[vert_idx * bone_count + weight_idx]; \
+		float w = weight_array[vert_idx * bone_count + weight_idx]; \
+		if (w < FLT_EPSILON) { \
+			continue; \
+		} \
+		ERR_FAIL_INDEX(bone_idx, static_cast<int>(transform_array.size())); \
+		transformed_vert += transform_array[bone_idx].xform(read_array[vert_idx]) * w; \
+	} \
 	write_array[vert_idx] = transformed_vert;
 
 void ImporterMesh::generate_lods(float p_normal_merge_angle, Array p_bone_transform_array) {
@@ -478,8 +478,9 @@ void ImporterMesh::generate_lods(float p_normal_merge_angle, Array p_bone_transf
 		const float max_mesh_error = 1.0f; // We only need LODs that can be selected by error threshold.
 		const unsigned min_target_indices = 12;
 
-		LocalVector<int> current_indices = merged_indices;
+		LocalVector<int> current_indices(merged_indices);
 		float current_error = 0.0f;
+		bool allow_prune = true;
 
 		while (current_indices.size() > min_target_indices * 2) {
 			unsigned int current_index_count = current_indices.size();
@@ -492,6 +493,11 @@ void ImporterMesh::generate_lods(float p_normal_merge_angle, Array p_bone_transf
 
 			// Lock geometric boundary in case the mesh is composed of multiple material subsets.
 			simplify_options |= SurfaceTool::SIMPLIFY_LOCK_BORDER;
+
+			if (allow_prune) {
+				// Remove small disconnected components.
+				simplify_options |= SurfaceTool::SIMPLIFY_PRUNE;
+			}
 
 			if (deformable) {
 				// Improves appearance of deformable objects after deformation by using more regular tessellation.
@@ -512,6 +518,15 @@ void ImporterMesh::generate_lods(float p_normal_merge_angle, Array p_bone_transf
 					max_mesh_error,
 					simplify_options,
 					&step_error);
+
+			if (new_index_count == 0 && allow_prune) {
+				// If the best result the simplifier could arrive at with pruning enabled is 0 triangles, there might still be an opportunity
+				// to reduce the number of triangles further *without* completely decimating the mesh. It will be impossible to reach the target
+				// this way - if the target was reachable without going down to 0, the simplifier would have done it! - but we might still be able
+				// to get one more slightly lower level if we retry without pruning.
+				allow_prune = false;
+				continue;
+			}
 
 			// Accumulate error over iterations. Usually, it's correct to use step_error as is; however, on coarse LODs, we may start
 			// getting *smaller* relative error compared to the previous LOD. To make sure the error is monotonic and strictly increasing,
@@ -610,6 +625,44 @@ Ref<ArrayMesh> ImporterMesh::get_mesh(const Ref<ArrayMesh> &p_base) {
 	}
 
 	return mesh;
+}
+
+Ref<ImporterMesh> ImporterMesh::from_mesh(const Ref<Mesh> &p_mesh) {
+	Ref<ImporterMesh> importer_mesh;
+	importer_mesh.instantiate();
+	if (p_mesh.is_null()) {
+		return importer_mesh;
+	}
+	Ref<ArrayMesh> array_mesh = p_mesh;
+	// Convert blend shape mode and names if any.
+	if (p_mesh->get_blend_shape_count() > 0) {
+		ArrayMesh::BlendShapeMode shape_mode = ArrayMesh::BLEND_SHAPE_MODE_NORMALIZED;
+		if (array_mesh.is_valid()) {
+			shape_mode = array_mesh->get_blend_shape_mode();
+		}
+		importer_mesh->set_blend_shape_mode(shape_mode);
+		for (int morph_i = 0; morph_i < p_mesh->get_blend_shape_count(); morph_i++) {
+			importer_mesh->add_blend_shape(p_mesh->get_blend_shape_name(morph_i));
+		}
+	}
+	// Add surfaces one by one.
+	for (int32_t surface_i = 0; surface_i < p_mesh->get_surface_count(); surface_i++) {
+		Ref<Material> mat = p_mesh->surface_get_material(surface_i);
+		String surface_name;
+		if (array_mesh.is_valid()) {
+			surface_name = array_mesh->surface_get_name(surface_i);
+		}
+		if (surface_name.is_empty() && mat.is_valid()) {
+			surface_name = mat->get_name();
+		}
+		importer_mesh->add_surface(p_mesh->surface_get_primitive_type(surface_i), p_mesh->surface_get_arrays(surface_i),
+				p_mesh->surface_get_blend_shape_arrays(surface_i), p_mesh->surface_get_lods(surface_i),
+				mat, surface_name, p_mesh->surface_get_format(surface_i));
+	}
+	// Merge metadata.
+	importer_mesh->merge_meta_from(*p_mesh);
+	importer_mesh->set_name(p_mesh->get_name());
+	return importer_mesh;
 }
 
 void ImporterMesh::clear() {
@@ -898,7 +951,7 @@ Ref<ConvexPolygonShape3D> ImporterMesh::create_convex_shape(bool p_clean, bool p
 		Geometry3D::MeshData md;
 		Error err = ConvexHullComputer::convex_hull(vertices, md);
 		if (err == OK) {
-			shape->set_points(md.vertices);
+			shape->set_points(Vector<Vector3>(md.vertices));
 			return shape;
 		} else {
 			ERR_PRINT("Convex shape cleaning failed, falling back to simpler process.");
@@ -1240,6 +1293,7 @@ void ImporterMesh::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("generate_lods", "normal_merge_angle", "normal_split_angle", "bone_transform_array"), &ImporterMesh::_generate_lods_bind);
 	ClassDB::bind_method(D_METHOD("get_mesh", "base_mesh"), &ImporterMesh::get_mesh, DEFVAL(Ref<ArrayMesh>()));
+	ClassDB::bind_static_method("ImporterMesh", D_METHOD("from_mesh", "mesh"), &ImporterMesh::from_mesh);
 	ClassDB::bind_method(D_METHOD("clear"), &ImporterMesh::clear);
 
 	ClassDB::bind_method(D_METHOD("_set_data", "data"), &ImporterMesh::_set_data);
